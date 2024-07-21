@@ -15,16 +15,15 @@ class BaseModel(Model):
 
 class ViewCount(BaseModel):
     count = IntegerField(default=0)
-    date = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
+    date = DateTimeField(unique=True)
     online_count = IntegerField(default=0)
 
 class User(BaseModel):
     user_id = CharField(unique=True)
     last_visit = DateTimeField()
 
-with app.app_context():
-    db.connect()
-    db.create_tables([ViewCount, User], safe=True)
+db.connect()
+db.create_tables([ViewCount, User], safe=True)
 
 @app.route('/increment', methods=['POST'])
 def increment_views():
@@ -41,7 +40,7 @@ def increment_views():
             user, created = User.get_or_create(user_id=user_id)
         else:
             user_id = str(now.timestamp())
-            user = User.create(user_id=user_id)
+            user = User.create(user_id=user_id, last_visit=now)
 
         user.last_visit = now
         user.save()
@@ -49,7 +48,6 @@ def increment_views():
         resp = make_response(jsonify({"message": "View count incremented", "views": view_count_today.count}))
         resp.set_cookie('user_id', user_id, max_age=365*24*60*60)  # Set cookie for 1 year
         return resp
-
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -60,8 +58,8 @@ def get_count():
         today_start = datetime(now.year, now.month, now.day)
         yesterday_start = today_start - timedelta(days=1)
         
-        view_count_today = ViewCount.select().where(ViewCount.date == today_start).first()
-        view_count_yesterday = ViewCount.select().where(ViewCount.date == yesterday_start).first()
+        view_count_today = ViewCount.get_or_none(date=today_start)
+        view_count_yesterday = ViewCount.get_or_none(date=yesterday_start)
 
         return jsonify({
             "today": view_count_today.count if view_count_today else 0,
